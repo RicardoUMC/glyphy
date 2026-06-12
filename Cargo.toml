@@ -1,0 +1,12 @@
+[package]
+name = "glyphy"
+version = "0.1.0"
+edition = "2021"
+description = "Terminal-first image renderer using Unicode glyphs"
+license = "MIT"
+
+[dependencies]
+image = "0.25"
+clap = { version = "4", features = ["derive"] }
+crossterm = "0.28"
+anyhow = "1"
