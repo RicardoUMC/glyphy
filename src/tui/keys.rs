@@ -36,16 +36,20 @@ pub fn resolve_key(event: KeyEvent) -> Option<KeyAction> {
         | (KeyCode::Esc, KeyModifiers::NONE) => Some(KeyAction::Quit),
 
         // Width: h/l or ←/→
-        (KeyCode::Char('h'), KeyModifiers::NONE)
-        | (KeyCode::Left, KeyModifiers::NONE) => Some(KeyAction::WidthDown),
-        (KeyCode::Char('l'), KeyModifiers::NONE)
-        | (KeyCode::Right, KeyModifiers::NONE) => Some(KeyAction::WidthUp),
+        (KeyCode::Char('h'), KeyModifiers::NONE) | (KeyCode::Left, KeyModifiers::NONE) => {
+            Some(KeyAction::WidthDown)
+        }
+        (KeyCode::Char('l'), KeyModifiers::NONE) | (KeyCode::Right, KeyModifiers::NONE) => {
+            Some(KeyAction::WidthUp)
+        }
 
         // Height: j/k or ↓/↑
-        (KeyCode::Char('j'), KeyModifiers::NONE)
-        | (KeyCode::Down, KeyModifiers::NONE) => Some(KeyAction::HeightDown),
-        (KeyCode::Char('k'), KeyModifiers::NONE)
-        | (KeyCode::Up, KeyModifiers::NONE) => Some(KeyAction::HeightUp),
+        (KeyCode::Char('j'), KeyModifiers::NONE) | (KeyCode::Down, KeyModifiers::NONE) => {
+            Some(KeyAction::HeightDown)
+        }
+        (KeyCode::Char('k'), KeyModifiers::NONE) | (KeyCode::Up, KeyModifiers::NONE) => {
+            Some(KeyAction::HeightUp)
+        }
 
         // Cycle ramp
         (KeyCode::Char('r'), KeyModifiers::NONE) => Some(KeyAction::CycleRamp),
@@ -54,7 +58,9 @@ pub fn resolve_key(event: KeyEvent) -> Option<KeyAction> {
         (KeyCode::Char('i'), KeyModifiers::NONE) => Some(KeyAction::ToggleInvert),
 
         // Toggle help
-        (KeyCode::Char('?'), KeyModifiers::NONE) => Some(KeyAction::ToggleHelp),
+        (KeyCode::Char('?'), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
+            Some(KeyAction::ToggleHelp)
+        }
 
         _ => None,
     }

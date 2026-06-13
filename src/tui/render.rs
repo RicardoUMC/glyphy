@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::Paragraph,
@@ -24,28 +24,10 @@ use crate::tui::app::App;
 /// When `show_help` is true, a centered overlay dialog is drawn on top.
 pub fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
-
-    // Top-level vertical layout: title, content, status bar.
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1), // Title bar
-            Constraint::Min(1),    // Main content
-            Constraint::Length(1), // Status bar
-        ])
-        .split(area);
+    let (chunks, main_chunks) = layout_chunks(area);
 
     // Title bar at the very top.
     render_title_bar(frame, chunks[0], app);
-
-    // Main content: horizontal split — image output (left) + settings (right).
-    let main_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(70), // Image output
-            Constraint::Percentage(30), // Settings panel
-        ])
-        .split(chunks[1]);
 
     crate::tui::widgets::render_image(frame, main_chunks[0], app);
     crate::tui::widgets::render_settings(frame, main_chunks[1], app);
@@ -57,6 +39,38 @@ pub fn render(frame: &mut Frame, app: &App) {
     if app.show_help {
         crate::tui::widgets::render_help_overlay(frame, area);
     }
+}
+
+/// Resolve the drawable image area inside the output pane.
+pub fn image_inner_area(area: Rect) -> Rect {
+    let (_, main_chunks) = layout_chunks(area);
+    main_chunks[0].inner(Margin {
+        vertical: 1,
+        horizontal: 1,
+    })
+}
+
+fn layout_chunks(area: Rect) -> (std::rc::Rc<[Rect]>, std::rc::Rc<[Rect]>) {
+    // Top-level vertical layout: title, content, status bar.
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Title bar
+            Constraint::Min(1),    // Main content
+            Constraint::Length(1), // Status bar
+        ])
+        .split(area);
+
+    // Main content: horizontal split — image output (left) + settings (right).
+    let main_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(70), // Image output
+            Constraint::Percentage(30), // Settings panel
+        ])
+        .split(chunks[1]);
+
+    (chunks, main_chunks)
 }
 
 /// Render a single-line title bar with the app name and help hint.

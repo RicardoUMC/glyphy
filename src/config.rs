@@ -11,8 +11,8 @@ pub const DEFAULT_RAMP: &str = " .:-=+*#%@";
 pub const RAMP_PRESETS: &[&str] = &[
     " .:-=+*#%@",
     " ░▒▓█",
-    "@%#*+=-:. ",
-    "█▓▒░ ",
+    " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",
+    "  .oO@",
 ];
 
 /// Configuration for the glyph rendering pipeline.

@@ -11,15 +11,15 @@ use crate::tui::app::App;
 /// Render the image output area showing the GlyphBuffer content.
 pub fn render_image(frame: &mut Frame, area: Rect, app: &App) {
     let block = Block::default().borders(Borders::ALL).title("Output");
-    if let Some(buffer) = &app.buffer {
-        let text = buffer.to_string_output();
-        let paragraph = Paragraph::new(text).block(block);
-        frame.render_widget(paragraph, area);
-    } else if let Some(err) = &app.last_error {
+    if let Some(err) = &app.last_error {
         let text = Text::from(Line::from(Span::styled(
             err,
             Style::default().fg(Color::Red),
         )));
+        let paragraph = Paragraph::new(text).block(block);
+        frame.render_widget(paragraph, area);
+    } else if let Some(buffer) = &app.buffer {
+        let text = buffer.to_string_output();
         let paragraph = Paragraph::new(text).block(block);
         frame.render_widget(paragraph, area);
     } else {
@@ -57,7 +57,7 @@ pub fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
 /// Render the bottom status bar with keybinding hints.
 pub fn render_status_bar(frame: &mut Frame, area: Rect, _app: &App) {
     let text = Line::from(Span::styled(
-        " :q quit  |  ? help  |  ← → ↑ ↓ / hjkl  |  r ramp  |  i invert",
+        " q quit  |  ? help  |  ← → ↑ ↓ / hjkl  |  r ramp  |  i invert",
         Style::default().fg(Color::Black).bg(Color::White),
     ));
     frame.render_widget(Paragraph::new(text), area);
