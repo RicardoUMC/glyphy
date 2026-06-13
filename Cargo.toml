@@ -9,4 +9,5 @@ license = "MIT"
 image = "0.25"
 clap = { version = "4", features = ["derive"] }
 crossterm = "0.28"
+ratatui = "0.29"
 anyhow = "1"

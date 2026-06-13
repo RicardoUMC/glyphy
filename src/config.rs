@@ -4,6 +4,17 @@
 /// Index 0 = darkest (space), last = brightest (█).
 pub const DEFAULT_RAMP: &str = " .:-=+*#%@";
 
+/// Character ramp presets for cycling in TUI mode.
+///
+/// Index 0 matches `DEFAULT_RAMP`. Each preset is a density ramp
+/// from dark to bright. Wraps around when cycling.
+pub const RAMP_PRESETS: &[&str] = &[
+    " .:-=+*#%@",
+    " ░▒▓█",
+    "@%#*+=-:. ",
+    "█▓▒░ ",
+];
+
 /// Configuration for the glyph rendering pipeline.
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -43,6 +54,22 @@ impl Config {
             ramp,
             invert,
         }
+    }
+
+    /// Cycle the ramp to the next preset, wrapping around.
+    ///
+    /// If the current ramp does not match any preset, it resets to the default.
+    pub fn next_ramp(&mut self) {
+        let current_str: String = self.ramp.iter().collect();
+        for (i, preset) in RAMP_PRESETS.iter().enumerate() {
+            if *preset == current_str {
+                let next = RAMP_PRESETS[(i + 1) % RAMP_PRESETS.len()];
+                self.ramp = next.chars().collect();
+                return;
+            }
+        }
+        // Unknown ramp — reset to default.
+        self.ramp = RAMP_PRESETS[0].chars().collect();
     }
 
     /// Map a brightness value (0.0–1.0) to a character from the ramp.

@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use glyphy::{config::{Config, DEFAULT_RAMP}, render_to_terminal_with};
+use glyphy::config::{Config, DEFAULT_RAMP};
+use glyphy::render_to_terminal_with;
 
 const MAX_DIMENSION: u32 = 2000;
 
@@ -29,6 +30,10 @@ struct Cli {
     /// Invert brightness mapping.
     #[arg(short = 'n', long, default_value_t = false)]
     invert: bool,
+
+    /// Launch interactive TUI mode.
+    #[arg(long, default_value_t = false)]
+    tui: bool,
 }
 
 fn main() -> Result<()> {
@@ -36,7 +41,12 @@ fn main() -> Result<()> {
 
     let config = Config::new(cli.width, cli.height, cli.ramp, cli.invert);
 
-    render_to_terminal_with(&cli.input, &config)?;
+    if cli.tui {
+        let mut app = glyphy::tui::App::new(&cli.input, config)?;
+        app.run()?;
+    } else {
+        render_to_terminal_with(&cli.input, &config)?;
+    }
 
     Ok(())
 }

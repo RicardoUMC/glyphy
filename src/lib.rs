@@ -3,6 +3,7 @@ pub mod config;
 pub mod input;
 pub mod processing;
 pub mod rendering;
+pub mod tui;
 
 use std::path::Path;
 
