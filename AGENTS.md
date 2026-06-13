@@ -17,26 +17,23 @@ No tests exist yet. No CI. No formatter config beyond rustfmt defaults.
 Layered, trait-based. Layers must not import from each other except through traits.
 
 ```
-input/       → ImageSource trait (load image from path)
-processing/  → Processor trait + GlyphBuffer (image → glyph grid)
-rendering/   → Renderer trait (glyph grid → output)
-app/         → Pipeline orchestrator (wires input→process→render)
-config.rs    → Config struct + brightness_to_char mapping
+input/          → ImageSource trait + ImageFileLoader
+processing/     → Processor trait + BrightnessProcessor + GlyphBuffer
+rendering/      → Renderer trait + TerminalRenderer
+app/            → Pipeline orchestrator (wires input→process→render)
+config.rs       → Config struct + brightness_to_char mapping
+lib.rs          → Public API (render_to_terminal, process_image)
+main.rs         → Thin CLI wrapper (clap parsing only)
 ```
 
-**Concrete implementations live in `main.rs`**, not in their modules. This is intentional for MVP — keeps the library surface minimal. Move them to their modules when adding alternative implementations.
+**Library-first design**: `lib.rs` exposes a public API that any frontend can consume. `main.rs` is just a CLI wrapper around the library.
+
+Public API:
+- `render_to_terminal(path)` — simple render with defaults
+- `render_to_terminal_with(path, config)` — render with custom config
+- `process_image(path, config) → GlyphBuffer` — process without rendering (for TUI, web, Neovim, etc.)
 
 `GlyphBuffer` is the contract between processing and rendering. Processors produce it, renderers consume it. It holds a `Vec<Vec<GlyphCell>>` in row-major order.
-
-## Constraints
-
-- No video support in first iteration
-- No webcam support in first iteration
-- No advanced export in first iteration
-- Architectural clarity over premature optimization
-- Avoid unnecessary dependencies
-- Processing must not depend on UI
-- Renderer must be reusable for both stdout and future TUI
 
 ## Key Gotchas
 
@@ -60,6 +57,7 @@ Do not add `ratatui`, `tokio`, `log`, or `tracing` until the roadmap requires it
 | Phase | Goal | Status |
 |-------|------|--------|
 | 1 | Image → Glyphs → Terminal | ✓ done |
+| 1.5 | Library refactor (public API) | ✓ done |
 | 2 | Interactive config (width, height, char ramp, invert) | next |
 | 3 | TUI with ratatui | planned |
 | 4 | Real-time video | planned |
