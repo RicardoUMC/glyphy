@@ -11,6 +11,7 @@ fn main() {
         Rgb([r, g, b])
     });
 
-    img.save("test_gradient.png").expect("Failed to save test image");
+    img.save("test_gradient.png")
+        .expect("Failed to save test image");
     println!("Created test_gradient.png ({}x{})", width, height);
 }

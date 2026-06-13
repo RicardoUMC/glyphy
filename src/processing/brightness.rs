@@ -17,23 +17,11 @@ impl Processor for BrightnessProcessor {
 
         // Calculate target dimensions preserving aspect ratio.
         // Terminal characters are ~2:1 (height:width), so we double the width.
-        let target_w = config.width.unwrap_or_else(|| {
-            crossterm::terminal::size()
-                .map(|(width, _)| u32::from(width))
-                .unwrap_or(orig_w)
-        });
+        let target_w = config.width.unwrap_or(orig_w);
         let target_h = config.height.unwrap_or_else(|| {
             let aspect = orig_h as f32 / orig_w as f32;
             // Factor of 0.5 compensates for non-square terminal characters
-            let computed_h = (target_w as f32 * aspect * 0.5) as u32;
-
-            if config.width.is_none() {
-                if let Ok((_, height)) = crossterm::terminal::size() {
-                    return computed_h.min(u32::from(height));
-                }
-            }
-
-            computed_h
+            (target_w as f32 * aspect * 0.5) as u32
         });
 
         let target_w = target_w.max(1) as usize;

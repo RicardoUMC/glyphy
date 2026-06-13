@@ -54,6 +54,10 @@ impl Config {
         };
 
         let len = self.ramp.len();
+        if len == 0 {
+            return ' ';
+        }
+
         let index = (brightness * (len - 1) as f32).round() as usize;
         let index = index.min(len - 1);
         self.ramp[index]

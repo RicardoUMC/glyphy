@@ -31,7 +31,7 @@ main.rs         → Thin CLI wrapper (clap parsing only)
 Public API:
 - `render_to_terminal(path)` — simple render with defaults
 - `render_to_terminal_with(path, config)` — render with custom config
-- `process_image(path, config) → GlyphBuffer` — process without rendering (for TUI, web, Neovim, etc.)
+- `process_image(path, config) → GlyphBuffer` — process without rendering (for TUI, web, etc.)
 
 `GlyphBuffer` is the contract between processing and rendering. Processors produce it, renderers consume it. It holds a `Vec<Vec<GlyphCell>>` in row-major order.
 
@@ -63,3 +63,6 @@ Do not add `ratatui`, `tokio`, `log`, or `tracing` until the roadmap requires it
 | 4 | Real-time video | planned |
 | 5 | ANSI colors | planned |
 | 6 | Unicode advanced + Braille rendering | planned |
+| 7 | Web frontend (WASM, optional) | planned |
+
+**Frontends in scope:** CLI, TUI. Web is optional/future. No Neovim or other plugins planned.

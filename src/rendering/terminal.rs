@@ -9,7 +9,7 @@ use crate::processing::GlyphBuffer;
 /// Terminal stdout renderer.
 ///
 /// Clears the screen and renders the glyph buffer to stdout.
-/// Uses a single print! call for performance (avoiding per-character output).
+/// Uses a single stdout write for performance (avoiding per-character output).
 pub struct TerminalRenderer;
 
 impl Renderer for TerminalRenderer {
@@ -20,7 +20,7 @@ impl Renderer for TerminalRenderer {
         execute!(stdout, cursor::MoveTo(0, 0))?;
 
         let output = buffer.to_string_output();
-        print!("{output}");
+        writeln!(stdout, "{output}")?;
         stdout.flush()?;
 
         Ok(())
