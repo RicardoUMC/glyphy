@@ -16,6 +16,7 @@ use crate::tui::app::App;
 /// ├──────────────────────┬──────────────────────┤
 /// │                      │  Settings panel      │
 /// │  Image output        │  (config + keys)     │
+/// │  or File picker      │                      │
 /// │                      │                      │
 /// ├──────────────────────┴──────────────────────┤
 /// │  Status bar (keybinding hints)              │
@@ -29,7 +30,13 @@ pub fn render(frame: &mut Frame, app: &App) {
     // Title bar at the very top.
     render_title_bar(frame, chunks[0], app);
 
-    crate::tui::widgets::render_image(frame, main_chunks[0], app);
+    // Left panel: file picker or image output
+    if app.picker_mode {
+        crate::tui::widgets::render_picker(frame, main_chunks[0], app);
+    } else {
+        crate::tui::widgets::render_image(frame, main_chunks[0], app);
+    }
+
     crate::tui::widgets::render_settings(frame, main_chunks[1], app);
 
     // Status bar at the bottom.
@@ -65,7 +72,7 @@ fn layout_chunks(area: Rect) -> (std::rc::Rc<[Rect]>, std::rc::Rc<[Rect]>) {
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(70), // Image output
+            Constraint::Percentage(70), // Image output / File picker
             Constraint::Percentage(30), // Settings panel
         ])
         .split(chunks[1]);
@@ -77,19 +84,26 @@ fn layout_chunks(area: Rect) -> (std::rc::Rc<[Rect]>, std::rc::Rc<[Rect]>) {
 fn render_title_bar(frame: &mut Frame, area: Rect, app: &App) {
     let title = if app.last_error.is_some() {
         " Glyphy (error)"
+    } else if app.picker_mode {
+        " Glyphy — Select Image"
     } else {
         " Glyphy"
     };
     let hint = "[?] help";
 
     let text = Line::from(vec![
-        Span::styled(title, Style::default().bold().fg(Color::White)),
+        Span::styled(
+            title,
+            Style::default()
+                .bold()
+                .fg(Color::Cyan),
+        ),
         Span::styled("  ", Style::default().fg(Color::White)),
         Span::styled(hint, Style::default().fg(Color::DarkGray)),
     ]);
 
     frame.render_widget(
-        Paragraph::new(text).style(Style::default().bg(Color::Black)),
+        Paragraph::new(text).style(Style::default().bg(Color::Rgb(30, 30, 30))),
         area,
     );
 }

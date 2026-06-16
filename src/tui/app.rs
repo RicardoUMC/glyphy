@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::stdout;
 use std::path::{Path, PathBuf};
 
@@ -17,6 +18,9 @@ use crate::processing::GlyphBuffer;
 use crate::tui::keys::KeyAction;
 
 const MAX_DIMENSION: u32 = 2000;
+
+/// Supported image file extensions for the file picker.
+const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "bmp"];
 
 struct TerminalGuard;
 
@@ -49,6 +53,14 @@ pub struct App {
     pub dirty: bool,
     /// Most recent error message, displayed in the UI.
     pub last_error: Option<String>,
+    /// Whether we're in file picker mode (no image loaded yet).
+    pub picker_mode: bool,
+    /// List of image files found in CWD for the file picker.
+    pub picker_files: Vec<PathBuf>,
+    /// Currently selected index in the file picker.
+    pub picker_index: usize,
+    /// Current focused panel: 'f'ile, 's'ettings, 'o'utput.
+    pub focus: char,
 }
 
 impl App {
@@ -67,9 +79,72 @@ impl App {
             auto_size,
             dirty: true,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.process()?;
         Ok(app)
+    }
+
+    /// Create a new `App` in file picker mode (no image loaded).
+    ///
+    /// Scans CWD for image files and displays the picker.
+    pub fn new_picker(config: Config) -> Result<Self> {
+        let files = Self::scan_cwd_images();
+        let mut app = Self {
+            config,
+            buffer: None,
+            image_path: PathBuf::new(),
+            running: true,
+            show_help: false,
+            auto_size: true,
+            dirty: true,
+            last_error: None,
+            picker_mode: true,
+            picker_files: files,
+            picker_index: 0,
+            focus: 'f',
+        };
+        // Auto-select first file if available
+        if !app.picker_files.is_empty() {
+            app.image_path = app.picker_files[0].clone();
+            let _ = app.process();
+        }
+        Ok(app)
+    }
+
+    /// Scan CWD for image files (png, jpg, jpeg, webp, gif, bmp).
+    fn scan_cwd_images() -> Vec<PathBuf> {
+        let mut files = Vec::new();
+        if let Ok(entries) = fs::read_dir(".") {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                        if IMAGE_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
+                            files.push(path);
+                        }
+                    }
+                }
+            }
+        }
+        files.sort();
+        files
+    }
+
+    /// Load the currently selected file from the picker.
+    fn picker_select(&mut self) {
+        if let Some(path) = self.picker_files.get(self.picker_index) {
+            self.image_path = path.clone();
+            self.picker_mode = false;
+            self.auto_size = true;
+            self.config.width = None;
+            self.config.height = None;
+            self.focus = 'o';
+            let _ = self.process();
+        }
     }
 
     /// (Re)load the image with the current config.
@@ -135,6 +210,9 @@ impl App {
                 false
             }
             KeyAction::WidthUp => {
+                if self.picker_mode {
+                    return;
+                }
                 self.auto_size = false;
                 let w = self
                     .config
@@ -146,12 +224,24 @@ impl App {
                 true
             }
             KeyAction::WidthDown => {
+                if self.picker_mode {
+                    return;
+                }
                 self.auto_size = false;
                 let w = self.config.width.unwrap_or(80).saturating_sub(10).max(10);
                 self.config.width = Some(w);
                 true
             }
             KeyAction::HeightUp => {
+                if self.picker_mode {
+                    // In picker mode, move up in file list
+                    if self.picker_index > 0 {
+                        self.picker_index -= 1;
+                        self.image_path = self.picker_files[self.picker_index].clone();
+                        let _ = self.process();
+                    }
+                    return;
+                }
                 self.auto_size = false;
                 let h = self
                     .config
@@ -163,21 +253,72 @@ impl App {
                 true
             }
             KeyAction::HeightDown => {
+                if self.picker_mode {
+                    // In picker mode, move down in file list
+                    if self.picker_index + 1 < self.picker_files.len() {
+                        self.picker_index += 1;
+                        self.image_path = self.picker_files[self.picker_index].clone();
+                        let _ = self.process();
+                    }
+                    return;
+                }
                 self.auto_size = false;
                 let h = self.config.height.unwrap_or(40).saturating_sub(5).max(5);
                 self.config.height = Some(h);
                 true
             }
             KeyAction::CycleRamp => {
+                if self.picker_mode {
+                    return;
+                }
                 self.config.next_ramp();
                 true
             }
             KeyAction::ToggleInvert => {
+                if self.picker_mode {
+                    return;
+                }
                 self.config.invert = !self.config.invert;
                 true
             }
             KeyAction::ToggleHelp => {
                 self.show_help = !self.show_help;
+                false
+            }
+            KeyAction::NavConfirm => {
+                if self.picker_mode && !self.picker_files.is_empty() {
+                    self.picker_select();
+                }
+                false
+            }
+            KeyAction::FocusFile => {
+                self.focus = 'f';
+                false
+            }
+            KeyAction::FocusSettings => {
+                self.focus = 's';
+                false
+            }
+            KeyAction::FocusOutput => {
+                self.focus = 'o';
+                false
+            }
+            KeyAction::BackToPicker => {
+                if !self.picker_mode && !self.picker_files.is_empty() {
+                    self.picker_mode = true;
+                    self.buffer = None;
+                    self.focus = 'f';
+                    self.auto_size = true;
+                    self.config.width = None;
+                    self.config.height = None;
+                    // Re-scan CWD in case files changed
+                    self.picker_files = Self::scan_cwd_images();
+                    if !self.picker_files.is_empty() {
+                        self.picker_index = 0;
+                        self.image_path = self.picker_files[0].clone();
+                        let _ = self.process();
+                    }
+                }
                 false
             }
         };
@@ -248,8 +389,6 @@ mod tests {
     #[test]
     fn handle_action_quit_sets_running_false() {
         let config = Config::default();
-        // We can't construct App::new without a real image, so test
-        // the handle_action logic directly by constructing manually.
         let mut app = App {
             config,
             buffer: None,
@@ -259,6 +398,10 @@ mod tests {
             auto_size: false,
             dirty: false,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.handle_action(KeyAction::Quit);
         assert!(!app.running);
@@ -279,6 +422,10 @@ mod tests {
             auto_size: false,
             dirty: false,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.handle_action(KeyAction::WidthUp);
         assert_eq!(app.config.width, Some(90));
@@ -299,6 +446,10 @@ mod tests {
             auto_size: false,
             dirty: false,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.handle_action(KeyAction::WidthDown);
         assert_eq!(app.config.width, Some(70));
@@ -319,6 +470,10 @@ mod tests {
             auto_size: false,
             dirty: false,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.handle_action(KeyAction::WidthDown);
         assert_eq!(app.config.width, Some(10));
@@ -339,6 +494,10 @@ mod tests {
             auto_size: false,
             dirty: false,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.handle_action(KeyAction::HeightUp);
         assert_eq!(app.config.height, Some(45));
@@ -359,6 +518,10 @@ mod tests {
             auto_size: false,
             dirty: false,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.handle_action(KeyAction::HeightDown);
         assert_eq!(app.config.height, Some(35));
@@ -379,6 +542,10 @@ mod tests {
             auto_size: false,
             dirty: false,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.handle_action(KeyAction::HeightDown);
         assert_eq!(app.config.height, Some(5));
@@ -401,6 +568,10 @@ mod tests {
             auto_size: false,
             dirty: false,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.handle_action(KeyAction::CycleRamp);
         let expected: String = RAMP_PRESETS[1].chars().collect();
@@ -423,6 +594,10 @@ mod tests {
             auto_size: false,
             dirty: false,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.handle_action(KeyAction::ToggleInvert);
         assert!(app.config.invert);
@@ -442,6 +617,10 @@ mod tests {
             auto_size: false,
             dirty: false,
             last_error: None,
+            picker_mode: false,
+            picker_files: Vec::new(),
+            picker_index: 0,
+            focus: 'o',
         };
         app.handle_action(KeyAction::ToggleHelp);
         assert!(app.show_help);
@@ -451,7 +630,6 @@ mod tests {
 
     #[test]
     fn cycle_ramp_wraps_around() {
-        // Start from the last preset and cycle — should return to first.
         let last_preset = RAMP_PRESETS[RAMP_PRESETS.len() - 1];
         let current: Vec<char> = last_preset.chars().collect();
         let next = next_ramp(&current);

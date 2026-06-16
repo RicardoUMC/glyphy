@@ -23,6 +23,16 @@ pub enum KeyAction {
     ToggleInvert,
     /// Show or hide the help dialog.
     ToggleHelp,
+    /// Confirm selection in picker (Enter).
+    NavConfirm,
+    /// Focus file panel (f).
+    FocusFile,
+    /// Focus settings panel (s).
+    FocusSettings,
+    /// Focus output panel (o).
+    FocusOutput,
+    /// Back to picker from image view (Backspace).
+    BackToPicker,
 }
 
 /// Resolve a crossterm [`KeyEvent`] into a [`KeyAction`].
@@ -61,6 +71,17 @@ pub fn resolve_key(event: KeyEvent) -> Option<KeyAction> {
         (KeyCode::Char('?'), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
             Some(KeyAction::ToggleHelp)
         }
+
+        // Confirm selection (Enter)
+        (KeyCode::Enter, KeyModifiers::NONE) => Some(KeyAction::NavConfirm),
+
+        // Section focus
+        (KeyCode::Char('f'), KeyModifiers::NONE) => Some(KeyAction::FocusFile),
+        (KeyCode::Char('s'), KeyModifiers::NONE) => Some(KeyAction::FocusSettings),
+        (KeyCode::Char('o'), KeyModifiers::NONE) => Some(KeyAction::FocusOutput),
+
+        // Back to picker
+        (KeyCode::Backspace, KeyModifiers::NONE) => Some(KeyAction::BackToPicker),
 
         _ => None,
     }

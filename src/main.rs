@@ -11,9 +11,9 @@ const MAX_DIMENSION: u32 = 2000;
 #[derive(Parser, Debug)]
 #[command(name = "glyphy", version, about)]
 struct Cli {
-    /// Path to the image file (PNG, JPG, WEBP).
+    /// Path to the image file (PNG, JPG, WEBP). Optional in TUI mode — opens file picker if omitted.
     #[arg(short, long)]
-    input: PathBuf,
+    input: Option<PathBuf>,
 
     /// Target width in characters.
     #[arg(short, long, value_parser = clap::value_parser!(u32).range(1..=MAX_DIMENSION as i64))]
@@ -42,10 +42,20 @@ fn main() -> Result<()> {
     let config = Config::new(cli.width, cli.height, cli.ramp, cli.invert);
 
     if cli.tui {
-        let mut app = glyphy::tui::App::new(&cli.input, config)?;
-        app.run()?;
+        // TUI mode: if no input, start with file picker
+        if let Some(input) = &cli.input {
+            let mut app = glyphy::tui::App::new(input, config)?;
+            app.run()?;
+        } else {
+            let mut app = glyphy::tui::App::new_picker(config)?;
+            app.run()?;
+        }
     } else {
-        render_to_terminal_with(&cli.input, &config)?;
+        // Non-TUI mode requires input
+        let input = cli.input.ok_or_else(|| {
+            anyhow::anyhow!("Input image is required in non-TUI mode. Use -i <image> or --tui.")
+        })?;
+        render_to_terminal_with(&input, &config)?;
     }
 
     Ok(())
