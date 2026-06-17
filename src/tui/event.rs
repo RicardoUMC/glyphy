@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use crossterm::event::{self, Event};
+use crossterm::event::{self, Event, KeyEventKind};
 
 use crate::tui::app::App;
 use crate::tui::keys::resolve_key;
@@ -18,7 +18,7 @@ pub fn handle_events(app: &mut App) -> Result<()> {
     };
 
     match event {
-        Event::Key(key) => {
+        Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
             if let Some(action) = resolve_key(key) {
                 app.handle_action(action);
             }

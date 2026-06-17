@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::stdout;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use anyhow::Result;
 use crossterm::cursor::Show;
@@ -21,6 +21,46 @@ const MAX_DIMENSION: u32 = 2000;
 
 /// Supported image file extensions for the file picker.
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "bmp"];
+
+/// An entry in the file picker: either a directory or an image file.
+pub enum PickerEntry {
+    Dir {
+        path: PathBuf,
+        is_parent: bool, // true for the ".." entry
+    },
+    File(PathBuf),
+}
+
+impl PickerEntry {
+    /// Display name for the entry (dirs get trailing "/", parent shows "..").
+    pub fn name(&self) -> String {
+        match self {
+            PickerEntry::Dir { path, is_parent } => {
+                if *is_parent {
+                    "../".to_string()
+                } else {
+                    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+                    format!("{}/", name)
+                }
+            }
+            PickerEntry::File(p) => {
+                p.file_name().and_then(|n| n.to_str()).unwrap_or("?").to_string()
+            }
+        }
+    }
+
+    /// Returns true if this entry is a directory.
+    pub fn is_dir(&self) -> bool {
+        matches!(self, PickerEntry::Dir { .. })
+    }
+
+    /// Returns the full path of the entry.
+    pub fn path(&self) -> &Path {
+        match self {
+            PickerEntry::Dir { path, .. } | PickerEntry::File(path) => path,
+        }
+    }
+}
 
 struct TerminalGuard;
 
@@ -55,8 +95,10 @@ pub struct App {
     pub last_error: Option<String>,
     /// Whether we're in file picker mode (no image loaded yet).
     pub picker_mode: bool,
-    /// List of image files found in CWD for the file picker.
-    pub picker_files: Vec<PathBuf>,
+    /// List of entries (directories and image files) in CWD for the file picker.
+    pub picker_entries: Vec<PickerEntry>,
+    /// Current working directory for the file picker (virtual, NOT the process CWD).
+    pub picker_cwd: PathBuf,
     /// Currently selected index in the file picker.
     pub picker_index: usize,
     /// Current focused panel: 'f'ile, 's'ettings, 'o'utput.
@@ -65,9 +107,6 @@ pub struct App {
 
 impl App {
     /// Create a new `App` and load the initial image.
-    ///
-    /// Calls `process()` immediately to populate the buffer.
-    /// Returns an error if the image cannot be loaded or processed.
     pub fn new(path: &Path, config: Config) -> Result<Self> {
         let auto_size = config.width.is_none() || config.height.is_none();
         let mut app = Self {
@@ -80,7 +119,8 @@ impl App {
             dirty: true,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: normalize_path(std::env::current_dir().unwrap_or_default()),
             picker_index: 0,
             focus: 'o',
         };
@@ -89,10 +129,9 @@ impl App {
     }
 
     /// Create a new `App` in file picker mode (no image loaded).
-    ///
-    /// Scans CWD for image files and displays the picker.
     pub fn new_picker(config: Config) -> Result<Self> {
-        let files = Self::scan_cwd_images();
+        let cwd = normalize_path(std::env::current_dir().unwrap_or_default());
+        let entries = Self::scan_cwd_entries(&cwd);
         let mut app = Self {
             config,
             buffer: None,
@@ -103,54 +142,105 @@ impl App {
             dirty: true,
             last_error: None,
             picker_mode: true,
-            picker_files: files,
+            picker_entries: entries,
+            picker_cwd: cwd,
             picker_index: 0,
             focus: 'f',
         };
         // Auto-select first file if available
-        if !app.picker_files.is_empty() {
-            app.image_path = app.picker_files[0].clone();
+        if let Some(PickerEntry::File(path)) = app.picker_entries.first() {
+            app.image_path = path.clone();
             let _ = app.process();
         }
         Ok(app)
     }
 
-    /// Scan CWD for image files (png, jpg, jpeg, webp, gif, bmp).
-    fn scan_cwd_images() -> Vec<PathBuf> {
-        let mut files = Vec::new();
-        if let Ok(entries) = fs::read_dir(".") {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file() {
+    /// Scan the given directory for subdirectories and image files.
+    /// Returns directories first (alphabetical), then files (alphabetical).
+    /// Includes ".." entry when not at filesystem root.
+    fn scan_cwd_entries(cwd: &Path) -> Vec<PickerEntry> {
+        let cwd = normalize_path(cwd.to_path_buf());
+        let mut entries = Vec::new();
+
+        // Add ".." if not at root — resolve to actual parent path
+        if let Some(parent) = cwd.parent() {
+            entries.push(PickerEntry::Dir {
+                path: normalize_path(parent.to_path_buf()),
+                is_parent: true,
+            });
+        }
+
+        if let Ok(dir_entries) = fs::read_dir(&cwd) {
+            for entry in dir_entries.flatten() {
+                let path = normalize_path(entry.path());
+                if path.is_dir() {
+                    entries.push(PickerEntry::Dir {
+                        path,
+                        is_parent: false,
+                    });
+                } else if path.is_file() {
                     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                         if IMAGE_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
-                            files.push(path);
+                            entries.push(PickerEntry::File(path));
                         }
                     }
                 }
             }
         }
-        files.sort();
-        files
+
+        // Sort: parent ("..") always first, then dirs (alphabetical), then files (alphabetical)
+        entries.sort_by(|a, b| {
+            let a_is_parent = matches!(a, PickerEntry::Dir { is_parent: true, .. });
+            let b_is_parent = matches!(b, PickerEntry::Dir { is_parent: true, .. });
+            if a_is_parent {
+                return std::cmp::Ordering::Less;
+            }
+            if b_is_parent {
+                return std::cmp::Ordering::Greater;
+            }
+            match (a.is_dir(), b.is_dir()) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.name().to_lowercase().cmp(&b.name().to_lowercase()),
+            }
+        });
+
+        entries
     }
 
-    /// Load the currently selected file from the picker.
+    /// Load the currently selected entry from the picker.
     fn picker_select(&mut self) {
-        if let Some(path) = self.picker_files.get(self.picker_index) {
-            self.image_path = path.clone();
-            self.picker_mode = false;
-            self.auto_size = true;
-            self.config.width = None;
-            self.config.height = None;
-            self.focus = 'o';
-            let _ = self.process();
+        if let Some(entry) = self.picker_entries.get(self.picker_index) {
+            match entry {
+                PickerEntry::Dir { path, is_parent } => {
+                    let target = if *is_parent {
+                        path.clone()
+                    } else if path.is_absolute() {
+                        path.clone()
+                    } else {
+                        self.picker_cwd.join(path)
+                    };
+
+                    // Virtual path tracking only — do NOT call set_current_dir
+                    self.picker_cwd = normalize_path(target);
+                    self.picker_entries = Self::scan_cwd_entries(&self.picker_cwd);
+                    self.picker_index = 0;
+                    self.dirty = true;
+                }
+                PickerEntry::File(path) => {
+                    self.image_path = path.clone();
+                    self.picker_mode = false;
+                    self.auto_size = true;
+                    self.config.width = None;
+                    self.config.height = None;
+                    self.focus = 'o';
+                    let _ = self.process();
+                }
+            }
         }
     }
 
     /// (Re)load the image with the current config.
-    ///
-    /// Calls `glyphy::process_image` and caches the result.
-    /// On failure, stores the error string in `last_error`.
     pub fn process(&mut self) -> Result<()> {
         let config = self.resolve_tui_config()?;
         match crate::process_image(&self.image_path, &config) {
@@ -199,8 +289,6 @@ impl App {
     }
 
     /// Apply a key action, updating config and state.
-    ///
-    /// For config-changing actions, re-processes the image automatically.
     pub fn handle_action(&mut self, action: KeyAction) {
         self.dirty = true;
 
@@ -234,11 +322,9 @@ impl App {
             }
             KeyAction::HeightUp => {
                 if self.picker_mode {
-                    // In picker mode, move up in file list
                     if self.picker_index > 0 {
                         self.picker_index -= 1;
-                        self.image_path = self.picker_files[self.picker_index].clone();
-                        let _ = self.process();
+                        self.dirty = true;
                     }
                     return;
                 }
@@ -254,11 +340,9 @@ impl App {
             }
             KeyAction::HeightDown => {
                 if self.picker_mode {
-                    // In picker mode, move down in file list
-                    if self.picker_index + 1 < self.picker_files.len() {
+                    if self.picker_index + 1 < self.picker_entries.len() {
                         self.picker_index += 1;
-                        self.image_path = self.picker_files[self.picker_index].clone();
-                        let _ = self.process();
+                        self.dirty = true;
                     }
                     return;
                 }
@@ -286,7 +370,7 @@ impl App {
                 false
             }
             KeyAction::NavConfirm => {
-                if self.picker_mode && !self.picker_files.is_empty() {
+                if self.picker_mode && !self.picker_entries.is_empty() {
                     self.picker_select();
                 }
                 false
@@ -304,36 +388,27 @@ impl App {
                 false
             }
             KeyAction::BackToPicker => {
-                if !self.picker_mode && !self.picker_files.is_empty() {
+                if !self.picker_mode && !self.picker_entries.is_empty() {
                     self.picker_mode = true;
                     self.buffer = None;
                     self.focus = 'f';
                     self.auto_size = true;
                     self.config.width = None;
                     self.config.height = None;
-                    // Re-scan CWD in case files changed
-                    self.picker_files = Self::scan_cwd_images();
-                    if !self.picker_files.is_empty() {
-                        self.picker_index = 0;
-                        self.image_path = self.picker_files[0].clone();
-                        let _ = self.process();
-                    }
+                    self.picker_entries = Self::scan_cwd_entries(&self.picker_cwd);
+                    self.picker_index = 0;
+                    self.dirty = true;
                 }
                 false
             }
         };
 
         if needs_reprocess {
-            // Ignore errors here — store in last_error for UI display.
             let _ = self.process();
         }
     }
 
     /// Run the TUI event loop.
-    ///
-    /// Enables raw mode, enters the alternate screen, and starts a
-    /// draw–poll loop that continues until the app signals quit.
-    /// Terminal state is always restored on exit (success or error).
     pub fn run(&mut self) -> Result<()> {
         enable_raw_mode()?;
         let _guard = TerminalGuard;
@@ -362,6 +437,27 @@ impl App {
     }
 }
 
+/// Normalize a path lexically without touching the filesystem.
+///
+/// This removes `.` and resolves `..` components without using
+/// `canonicalize()`, which can add Windows `\\?\` prefixes and requires
+/// filesystem access.
+fn normalize_path(path: PathBuf) -> PathBuf {
+    let mut normalized = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+
+    normalized
+}
+
 /// Cycle to the next ramp preset, wrapping around.
 #[cfg(test)]
 fn next_ramp(current: &[char]) -> Vec<char> {
@@ -381,7 +477,6 @@ mod tests {
     use super::*;
     use crate::config::{Config, RAMP_PRESETS};
 
-    /// The default ramp at index 0 of RAMP_PRESETS.
     fn default_ramp_str() -> String {
         RAMP_PRESETS[0].chars().collect()
     }
@@ -399,7 +494,8 @@ mod tests {
             dirty: false,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
         };
@@ -423,7 +519,8 @@ mod tests {
             dirty: false,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
         };
@@ -447,7 +544,8 @@ mod tests {
             dirty: false,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
         };
@@ -471,7 +569,8 @@ mod tests {
             dirty: false,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
         };
@@ -495,7 +594,8 @@ mod tests {
             dirty: false,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
         };
@@ -519,7 +619,8 @@ mod tests {
             dirty: false,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
         };
@@ -543,7 +644,8 @@ mod tests {
             dirty: false,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
         };
@@ -569,7 +671,8 @@ mod tests {
             dirty: false,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
         };
@@ -595,7 +698,8 @@ mod tests {
             dirty: false,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
         };
@@ -618,7 +722,8 @@ mod tests {
             dirty: false,
             last_error: None,
             picker_mode: false,
-            picker_files: Vec::new(),
+            picker_entries: Vec::new(),
+            picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
         };

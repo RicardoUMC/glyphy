@@ -91,7 +91,7 @@ fn render_title_bar(frame: &mut Frame, area: Rect, app: &App) {
     };
     let hint = "[?] help";
 
-    let text = Line::from(vec![
+    let mut spans = vec![
         Span::styled(
             title,
             Style::default()
@@ -99,11 +99,29 @@ fn render_title_bar(frame: &mut Frame, area: Rect, app: &App) {
                 .fg(Color::Cyan),
         ),
         Span::styled("  ", Style::default().fg(Color::White)),
-        Span::styled(hint, Style::default().fg(Color::DarkGray)),
-    ]);
+    ];
+
+    // Show CWD when in picker mode
+    if app.picker_mode {
+        let cwd_display = app.picker_cwd.display().to_string();
+        // Truncate if too long
+        let max_len = area.width.saturating_sub(30) as usize;
+        let cwd_str = if cwd_display.len() > max_len && max_len > 3 {
+            format!("...{}", &cwd_display[cwd_display.len() - max_len + 3..])
+        } else {
+            cwd_display
+        };
+        spans.push(Span::styled(
+            cwd_str,
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
+
+    spans.push(Span::styled("  ", Style::default().fg(Color::White)));
+    spans.push(Span::styled(hint, Style::default().fg(Color::DarkGray)));
 
     frame.render_widget(
-        Paragraph::new(text).style(Style::default().bg(Color::Rgb(30, 30, 30))),
+        Paragraph::new(Line::from(spans)).style(Style::default().bg(Color::Rgb(30, 30, 30))),
         area,
     );
 }

@@ -37,19 +37,31 @@ pub fn render_image(frame: &mut Frame, area: Rect, app: &App) {
     }
 }
 
-/// Render the file picker panel showing CWD image files.
+/// Render the file picker panel showing CWD directories and image files.
 pub fn render_picker(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = if app.focus == 'f' {
         Style::default().fg(Color::Green)
     } else {
         Style::default()
     };
+
+    // Show index indicator in title
+    let title = if app.picker_entries.is_empty() {
+        "Files".to_string()
+    } else {
+        format!(
+            "Files [{}/{}]",
+            app.picker_index + 1,
+            app.picker_entries.len()
+        )
+    };
+
     let block = Block::default()
         .borders(Borders::ALL)
-        .title("Files")
+        .title(title)
         .border_style(border_style);
 
-    if app.picker_files.is_empty() {
+    if app.picker_entries.is_empty() {
         let text = Text::from(vec![
             Line::from("No image files found"),
             Line::from("in current directory."),
@@ -69,16 +81,15 @@ pub fn render_picker(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let items: Vec<Line> = app
-        .picker_files
+        .picker_entries
         .iter()
         .enumerate()
-        .map(|(i, path)| {
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("?");
+        .map(|(i, entry)| {
+            let name = entry.name();
             let style = if i == app.picker_index {
                 Style::default().fg(Color::Black).bg(Color::Green)
+            } else if entry.is_dir() {
+                Style::default().fg(Color::Yellow)
             } else {
                 Style::default()
             };
@@ -230,6 +241,7 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
         Line::from(" s                  Focus settings panel"),
         Line::from(" o                  Focus output panel"),
         Line::from(" ⌫ (Backspace)     Back to file picker"),
+        Line::from(" ..                 Go to parent directory"),
         Line::from(" Enter              Select file (picker)"),
         Line::from(" ?                  Close this help"),
     ]);
