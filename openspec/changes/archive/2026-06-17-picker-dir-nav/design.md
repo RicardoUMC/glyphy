@@ -10,7 +10,7 @@ Extend the existing picker state in `App` with a `picker_cwd` field. Replace the
 User presses Enter on entry
   → App::handle_action(NavConfirm)
     → Is entry a directory?
-      YES: set_current_dir(entry) → scan_cwd_entries() → reset picker_index
+      YES: update virtual picker_cwd → scan_cwd_entries() → reset picker_index
       NO:  picker_select() → exit picker mode → process()
 ```
 
@@ -122,7 +122,6 @@ fn picker_select(&mut self) {
                 } else {
                     path.clone()
                 };
-                let _ = std::env::set_current_dir(&target);
                 self.picker_cwd = target;
                 self.picker_entries = Self::scan_cwd_entries(&self.picker_cwd);
                 self.picker_index = 0;
@@ -188,8 +187,8 @@ pub fn render_picker(frame: &mut Frame, area: Rect, app: &App) {
 |------|----------|
 | Root directory (no parent) | Don't show ".." entry |
 | Permission denied on dir | `read_dir().flatten()` skips unreadable entries silently |
-| CWD deleted mid-session | `read_dir` fails → empty list → "No files" message |
-| ".." selected | Navigate to `parent()` of current CWD |
+| CWD deleted mid-session | `read_dir` fails → safe virtual parent entry when applicable, otherwise "No files" message |
+| ".." selected | Update virtual `picker_cwd` to `parent()` of current picker directory without changing process CWD |
 | Empty directory | Show "No image files found" message (existing behavior) |
 | Windows paths | `Path` handles drive letters natively; `is_at_root` checks parent() |
 

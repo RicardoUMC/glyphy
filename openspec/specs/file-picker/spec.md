@@ -1,4 +1,4 @@
-# File Picker — Directory Navigation Spec
+# File Picker - Directory Navigation Spec
 
 ## Purpose
 
@@ -25,8 +25,9 @@ name with a trailing `"/"`.
 ### Requirement: Navigation on Enter
 
 When the user presses Enter on a directory entry (including `".."`), the App MUST
-update `picker_cwd` via `std::env::set_current_dir`, re-scan entries, and reset
-the selection index to 0. When on a file entry, existing behavior
+update the virtual `picker_cwd`, re-scan entries, and reset the selection index
+to 0. Picker navigation MUST NOT change the process/global CWD via
+`std::env::set_current_dir`. When on a file entry, existing behavior
 (`picker_select()`) MUST be preserved exactly: set `image_path`, exit picker mode,
 and call `process()`.
 
@@ -40,7 +41,9 @@ green-background highlight (`Color::Black` fg, `Color::Green` bg).
 
 Filesystem errors during directory scanning (permission denied, deleted CWD) MUST
 NOT crash the App. Unreadable entries MUST be skipped silently. If `picker_cwd`
-no longer exists, fall back to the filesystem root.
+cannot be read, the picker MUST show any safe virtual parent entry when
+applicable, or otherwise the empty-list message. It MUST NOT require fallback to
+the filesystem root.
 
 ### Requirement: CWD Persistence Across Mode Switches
 
@@ -53,13 +56,15 @@ MUST re-scan from the current `picker_cwd`, not the original CWD.
 
 - GIVEN picker shows `"assets/"` and `"photos/"` among entries
 - WHEN user selects `"photos/"` and presses Enter
-- THEN CWD changes to `./photos`, entries re-scanned, index reset to 0
+- THEN `picker_cwd` changes to `./photos`, entries re-scanned, index reset to 0
+- AND the process/global CWD is unchanged
 
 ### Scenario: Navigate up with ".."
 
 - GIVEN picker CWD is `./photos/subdir`
 - WHEN user selects `".."` and presses Enter
-- THEN CWD changes to `./photos`, entries re-scanned
+- THEN `picker_cwd` changes to `./photos`, entries re-scanned
+- AND the process/global CWD is unchanged
 
 ### Scenario: No ".." at platform root
 
@@ -102,7 +107,7 @@ MUST re-scan from the current `picker_cwd`, not the original CWD.
 
 ## Out of Scope
 
-- File operations (rename, delete, mkdir) — NOT included
+- File operations (rename, delete, mkdir) - NOT included
 - Showing non-image files (filtering remains by IMAGE_EXTENSIONS)
 - Symlink special handling (follow symlinks as-is)
 - Path display in picker title bar
@@ -113,4 +118,4 @@ MUST re-scan from the current `picker_cwd`, not the original CWD.
 - MUST NOT break existing file selection behavior or keybindings
 - Existing 26 tests MUST pass without modification
 - MUST handle Windows paths (drive letters, backslash separators)
-- Spec under 650 words: ✓
+- Spec under 650 words: yes

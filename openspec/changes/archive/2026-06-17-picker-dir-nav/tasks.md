@@ -21,7 +21,7 @@
 
 ### Task 1.4: Update picker_select for Dir/File
 - Match on `PickerEntry::Dir` vs `PickerEntry::File`
-- Dir: resolve path (handle ".." → parent), `set_current_dir`, update `picker_cwd`, re-scan, reset index
+- Dir: resolve path (handle ".." → parent), update virtual `picker_cwd`, re-scan, reset index; do not change process CWD
 - File: existing behavior (set image_path, exit picker, process)
 
 ### Verification
