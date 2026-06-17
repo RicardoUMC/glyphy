@@ -1,1 +1,10 @@
 /target
+
+# Local AI/tooling metadata
+.atl/
+
+# Terminal artifacts
+CONOUT$
+
+# Local generated test images
+test_gradient.*
