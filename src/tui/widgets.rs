@@ -1,19 +1,19 @@
 use ratatui::{
     layout::{Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
 use crate::tui::app::App;
+use crate::tui::theme::Theme;
 
 /// Render the image output area showing the GlyphBuffer content.
-pub fn render_image(frame: &mut Frame, area: Rect, app: &App) {
+pub fn render_image(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let border_style = if app.focus == 'o' {
-        Style::default().fg(Color::Cyan)
+        theme.focused_border
     } else {
-        Style::default()
+        theme.text
     };
     let block = Block::default()
         .borders(Borders::ALL)
@@ -21,10 +21,7 @@ pub fn render_image(frame: &mut Frame, area: Rect, app: &App) {
         .border_style(border_style);
 
     if let Some(err) = &app.last_error {
-        let text = Text::from(Line::from(Span::styled(
-            err,
-            Style::default().fg(Color::Red),
-        )));
+        let text = Text::from(Line::from(Span::styled(err, theme.error)));
         let paragraph = Paragraph::new(text).block(block);
         frame.render_widget(paragraph, area);
     } else if let Some(buffer) = &app.buffer {
@@ -38,11 +35,11 @@ pub fn render_image(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Render the file picker panel showing CWD directories and image files.
-pub fn render_picker(frame: &mut Frame, area: Rect, app: &App) {
+pub fn render_picker(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let border_style = if app.focus == 'f' {
-        Style::default().fg(Color::Green)
+        theme.file_border
     } else {
-        Style::default()
+        theme.text
     };
 
     // Show index indicator in title
@@ -66,14 +63,8 @@ pub fn render_picker(frame: &mut Frame, area: Rect, app: &App) {
             Line::from("No image files found"),
             Line::from("in current directory."),
             Line::from(""),
-            Line::from(Span::styled(
-                "Place images here or use",
-                Style::default().fg(Color::DarkGray),
-            )),
-            Line::from(Span::styled(
-                "glyphy -i <file> --tui",
-                Style::default().fg(Color::DarkGray),
-            )),
+            Line::from(Span::styled("Place images here or use", theme.muted)),
+            Line::from(Span::styled("glyphy -i <file> --tui", theme.muted)),
         ]);
         let paragraph = Paragraph::new(text).block(block);
         frame.render_widget(paragraph, area);
@@ -87,11 +78,11 @@ pub fn render_picker(frame: &mut Frame, area: Rect, app: &App) {
         .map(|(i, entry)| {
             let name = entry.name();
             let style = if i == app.picker_index {
-                Style::default().fg(Color::Black).bg(Color::Green)
+                theme.selection
             } else if entry.is_dir() {
-                Style::default().fg(Color::Yellow)
+                theme.directory
             } else {
-                Style::default()
+                theme.text
             };
             Line::from(Span::styled(format!("  {}", name), style))
         })
@@ -105,48 +96,53 @@ pub fn render_picker(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Render the settings panel showing current config and keybinding hints.
-pub fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
+pub fn render_settings(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let border_style = if app.focus == 's' {
-        Style::default().fg(Color::Cyan)
+        theme.focused_border
     } else {
-        Style::default()
+        theme.text
     };
 
     let config = &app.config;
     let ramp_str: String = config.ramp.iter().collect();
+    let compact = area.width < 50 || area.height < 10;
 
-    let lines = vec![
+    let mut lines = vec![
         Line::from(format!("Width:  {}", config.width.unwrap_or(80))),
         Line::from(format!("Height: {}", config.height.unwrap_or(40))),
         Line::from(format!("Ramp:   {}", ramp_str)),
-        Line::from(format!(
-            "Invert: {}",
+        Line::from(vec![
+            Span::raw("Invert: "),
             if config.invert {
-                Span::styled("on", Style::default().fg(Color::Yellow))
+                Span::styled("on", theme.settings_on)
             } else {
-                Span::styled("off", Style::default().fg(Color::DarkGray))
-            }
-        )),
-        Line::from(""),
-        Line::from(Span::styled(
-            "── Keys ──",
-            Style::default().fg(Color::Cyan),
-        )),
-        Line::from("  h/l  adjust width"),
-        Line::from("  j/k  adjust height"),
-        Line::from("  r    cycle ramp"),
-        Line::from("  i    toggle invert"),
-        Line::from("  ?    help  ·  q  quit"),
-        Line::from(""),
-        Line::from(Span::styled(
-            "── Sections ──",
-            Style::default().fg(Color::Cyan),
-        )),
-        Line::from("  f    files panel"),
-        Line::from("  s    settings panel"),
-        Line::from("  o    output panel"),
-        Line::from("  ⌫    back to picker"),
+                Span::styled("off", theme.settings_off)
+            },
+        ]),
     ];
+
+    if compact {
+        lines.push(Line::from(Span::styled(
+            "h/l width · j/k height · r ramp · i invert · ? help",
+            theme.muted,
+        )));
+    } else {
+        lines.extend([
+            Line::from(""),
+            Line::from(Span::styled("-- Keys --", theme.accent)),
+            Line::from("  h/l  adjust width"),
+            Line::from("  j/k  adjust height"),
+            Line::from("  r    cycle ramp"),
+            Line::from("  i    toggle invert"),
+            Line::from("  ?    help  ·  q  quit"),
+            Line::from(""),
+            Line::from(Span::styled("-- Sections --", theme.accent)),
+            Line::from("  f    files panel"),
+            Line::from("  s    settings panel"),
+            Line::from("  o    output panel"),
+            Line::from("  ⌫    back to picker"),
+        ]);
+    }
 
     let paragraph = Paragraph::new(Text::from(lines))
         .block(
@@ -161,74 +157,35 @@ pub fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Render the bottom status bar with keybinding hints.
-pub fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
+pub fn render_status_bar(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let mode = if app.picker_mode {
-        Span::styled(
-            " PICKER ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Green)
-                .bold(),
-        )
+        Span::styled(" PICKER ", theme.picker_badge)
     } else {
-        Span::styled(
-            " VIEW ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
-                .bold(),
-        )
+        Span::styled(" VIEW ", theme.view_badge)
     };
 
     let focus = match app.focus {
-        'f' => Span::styled(
-            " [f]ile ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Green),
-        ),
-        's' => Span::styled(
-            " [s]ettings ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan),
-        ),
-        _ => Span::styled(
-            " [o]utput ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan),
-        ),
+        'f' => Span::styled(" [f]ile ", theme.picker_badge),
+        's' => Span::styled(" [s]ettings ", theme.view_badge),
+        _ => Span::styled(" [o]utput ", theme.view_badge),
     };
 
     let hints = if app.picker_mode {
-        Span::styled(
-            "  j/k navigate · Enter select · q quit",
-            Style::default().fg(Color::DarkGray),
-        )
+        Span::styled("  j/k navigate · Enter select · q quit", theme.muted)
     } else {
-        Span::styled(
-            "  hjkl resize · r ramp · i invert · ⌫ picker",
-            Style::default().fg(Color::DarkGray),
-        )
+        Span::styled("  hjkl resize · r ramp · i invert · ⌫ picker", theme.muted)
     };
 
     let text = Line::from(vec![mode, focus, hints]);
-    frame.render_widget(
-        Paragraph::new(text).style(Style::default().bg(Color::Rgb(30, 30, 30))),
-        area,
-    )
+    frame.render_widget(Paragraph::new(text).style(theme.chrome), area)
 }
 
 /// Render a centered help dialog overlay.
-pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
+pub fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
     let popup = centered_rect(55, 55, area);
 
     let help_text = Text::from(vec![
-        Line::from(Span::styled(
-            " Help — Glyphy TUI",
-            Style::default().fg(Color::Cyan).bold(),
-        )),
+        Line::from(Span::styled(" Help — Glyphy TUI", theme.accent)),
         Line::from(""),
         Line::from(" q / Ctrl+C / Esc   Quit"),
         Line::from(" h / ←              Decrease width"),
@@ -251,9 +208,9 @@ pub fn render_help_overlay(frame: &mut Frame, area: Rect) {
             Block::default()
                 .borders(Borders::ALL)
                 .title("Help")
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(theme.focused_border),
         )
-        .style(Style::default().bg(Color::Rgb(30, 30, 30)).fg(Color::White));
+        .style(theme.help_overlay);
 
     frame.render_widget(Clear, popup);
     frame.render_widget(help, popup);

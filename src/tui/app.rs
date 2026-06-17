@@ -16,6 +16,7 @@ use ratatui::Terminal;
 use crate::config::Config;
 use crate::processing::GlyphBuffer;
 use crate::tui::keys::KeyAction;
+use crate::tui::theme::ThemeMode;
 
 const MAX_DIMENSION: u32 = 2000;
 
@@ -43,9 +44,11 @@ impl PickerEntry {
                     format!("{}/", name)
                 }
             }
-            PickerEntry::File(p) => {
-                p.file_name().and_then(|n| n.to_str()).unwrap_or("?").to_string()
-            }
+            PickerEntry::File(p) => p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("?")
+                .to_string(),
         }
     }
 
@@ -103,6 +106,8 @@ pub struct App {
     pub picker_index: usize,
     /// Current focused panel: 'f'ile, 's'ettings, 'o'utput.
     pub focus: char,
+    /// Current TUI chrome theme mode.
+    pub theme_mode: ThemeMode,
 }
 
 impl App {
@@ -123,6 +128,7 @@ impl App {
             picker_cwd: normalize_path(std::env::current_dir().unwrap_or_default()),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.process()?;
         Ok(app)
@@ -146,6 +152,7 @@ impl App {
             picker_cwd: cwd,
             picker_index: 0,
             focus: 'f',
+            theme_mode: ThemeMode::Dark,
         };
         // Auto-select first file if available
         if let Some(PickerEntry::File(path)) = app.picker_entries.first() {
@@ -190,8 +197,20 @@ impl App {
 
         // Sort: parent ("..") always first, then dirs (alphabetical), then files (alphabetical)
         entries.sort_by(|a, b| {
-            let a_is_parent = matches!(a, PickerEntry::Dir { is_parent: true, .. });
-            let b_is_parent = matches!(b, PickerEntry::Dir { is_parent: true, .. });
+            let a_is_parent = matches!(
+                a,
+                PickerEntry::Dir {
+                    is_parent: true,
+                    ..
+                }
+            );
+            let b_is_parent = matches!(
+                b,
+                PickerEntry::Dir {
+                    is_parent: true,
+                    ..
+                }
+            );
             if a_is_parent {
                 return std::cmp::Ordering::Less;
             }
@@ -498,6 +517,7 @@ mod tests {
             picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.handle_action(KeyAction::Quit);
         assert!(!app.running);
@@ -523,6 +543,7 @@ mod tests {
             picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.handle_action(KeyAction::WidthUp);
         assert_eq!(app.config.width, Some(90));
@@ -548,6 +569,7 @@ mod tests {
             picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.handle_action(KeyAction::WidthDown);
         assert_eq!(app.config.width, Some(70));
@@ -573,6 +595,7 @@ mod tests {
             picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.handle_action(KeyAction::WidthDown);
         assert_eq!(app.config.width, Some(10));
@@ -598,6 +621,7 @@ mod tests {
             picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.handle_action(KeyAction::HeightUp);
         assert_eq!(app.config.height, Some(45));
@@ -623,6 +647,7 @@ mod tests {
             picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.handle_action(KeyAction::HeightDown);
         assert_eq!(app.config.height, Some(35));
@@ -648,6 +673,7 @@ mod tests {
             picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.handle_action(KeyAction::HeightDown);
         assert_eq!(app.config.height, Some(5));
@@ -675,6 +701,7 @@ mod tests {
             picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.handle_action(KeyAction::CycleRamp);
         let expected: String = RAMP_PRESETS[1].chars().collect();
@@ -702,6 +729,7 @@ mod tests {
             picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.handle_action(KeyAction::ToggleInvert);
         assert!(app.config.invert);
@@ -726,6 +754,7 @@ mod tests {
             picker_cwd: PathBuf::from("."),
             picker_index: 0,
             focus: 'o',
+            theme_mode: ThemeMode::Dark,
         };
         app.handle_action(KeyAction::ToggleHelp);
         assert!(app.show_help);

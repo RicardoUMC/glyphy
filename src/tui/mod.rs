@@ -8,6 +8,7 @@ pub mod errors;
 pub mod event;
 pub mod keys;
 pub mod render;
+pub mod theme;
 pub mod widgets;
 
 pub use app::App;
